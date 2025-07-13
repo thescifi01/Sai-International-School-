@@ -1,1 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Bluetooth Mouse & Keyboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #121212;
+      color: white;
+      display: flex;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      max-width: 400px;
+      width: 100%;
+      background: #1e1e1e;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
+    }
+    button {
+      padding: 10px 15px;
+      margin: 5px;
+      font-size: 1rem;
+      border: none;
+      border-radius: 8px;
+      background: #3a3aff;
+      color: white;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #5a5aff;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 10px;
+      border-radius: 8px;
+      margin: 10px 0;
+      border: none;
+      font-size: 1rem;
+    }
+    .mouse-controls {
+      display: flex;
+      justify-content: space-between;
+    }
+    #touchpad {
+      height: 200px;
+      background: #2a2a2a;
+      border-radius: 10px;
+      margin: 10px 0;
+      touch-action: none;
+    }
+    #status {
+      font-size: 0.9rem;
+      margin-top: 10px;
+      color: #bbb;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🖱️ Bluetooth Controller</h1>
+    <button id="connectBtn">🔗 Connect Bluetooth</button>
+    <div id="status">Not connected</div>
 
+    <div class="controls">
+      <h2>Mouse</h2>
+      <div class="mouse-controls">
+        <button onclick="sendMouse('left')">⬅️</button>
+        <button onclick="sendMouse('click')">🖱️ Click</button>
+        <button onclick="sendMouse('right')">➡️</button>
+      </div>
+
+      <h2>Touchpad</h2>
+      <div id="touchpad"></div>
+
+      <h2>Keyboard</h2>
+      <input type="text" id="keyInput" placeholder="Type and press Send"/>
+      <button onclick="sendKeyboard()">Send</button>
+    </div>
+  </div>
+
+  <script>
+    let bluetoothDevice;
+    let gattServer;
+    let commandCharacteristic;
+
+    const SERVICE_UUID = '0000ffe0-0000-1000-8000-00805f9b34fb';
+    const CHARACTERISTIC_UUID = '0000ffe1-0000-1000-8000-00805f9b34fb';
+
+    document.getElementById('connectBtn').addEventListener('click', async () => {
+      try {
+        bluetoothDevice = await navigator.bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: [SERVICE_UUID]
+        });
+
+        document.getElementById('status').textContent = '⏳ Connecting...';
+
+        gattServer = await bluetoothDevice.gatt.connect();
+        const service = await gattServer.getPrimaryService(SERVICE_UUID);
+        commandCharacteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
+
+        document.getElementById('status').textContent = '✅ Connected to: ' + bluetoothDevice.name;
+      } catch (error) {
+        document.getElementById('status').textContent = '❌ Failed: ' + error;
+        console.error(error);
+      }
+    });
+
+    function sendMouse(action) {
+      if (!commandCharacteristic) return alert("⚠️ Not connected");
+      const message = `MOUSE:${action}`;
+      writeToDevice(message);
+    }
+
+    function sendKeyboard() {
+      if (!commandCharacteristic) return alert("⚠️ Not connected");
+      const key = document.getElementById('keyInput').value.trim();
+      if (!key) return;
+      const message = `KEY:${key}`;
+      writeToDevice(message);
+      document.getElementById('keyInput').value = ''; // clear input
+    }
+
+    function writeToDevice(message) {
+      const encoder = new TextEncoder();
+      commandCharacteristic.writeValue(encoder.encode(message));
+    }
+
+    // Touchpad movement
+    let lastX = 0, lastY = 0;
+    const touchpad = document.getElementById('touchpad');
+
+    touchpad.addEventListener('touchstart', e => {
+      const touch = e.touches[0];
+      lastX = touch.clientX;
+      lastY = touch.clientY;
+    });
+
+    touchpad.addEventListener('touchmove', e => {
+      e.preventDefault();
+      const touch = e.touches[0];
+      const dx = touch.clientX - lastX;
+      const dy = touch.clientY - lastY;
+      lastX = touch.clientX;
+      lastY = touch.clientY;
+
+      const message = `MOVE:${dx},${dy}`;
+      writeToDevice(message);
+    }, { passive: false });
+  </script>
+</body>
+</html>
